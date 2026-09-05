@@ -11,6 +11,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $versionFile = Join-Path $repoRoot "label_printer_helper\version.py"
 $manifestPath = Join-Path $repoRoot "update.json"
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
 function Get-CurrentVersion {
     $content = Get-Content -Raw -LiteralPath $versionFile
@@ -26,7 +27,8 @@ function Set-Version([string]$NewVersion) {
     }
     $content = Get-Content -Raw -LiteralPath $versionFile
     $content = $content -replace '__version__\s*=\s*"[^"]+"', "__version__ = `"$NewVersion`""
-    Set-Content -LiteralPath $versionFile -Value $content -Encoding utf8
+    $content = $content.Trim() + [Environment]::NewLine
+    [IO.File]::WriteAllText($versionFile, $content, $utf8NoBom)
 }
 
 function Bump-PatchVersion {
@@ -70,7 +72,8 @@ $manifest = [ordered]@{
     sha256 = $sha256
     metadata = @{ generated_at = (Get-Date).ToUniversalTime().ToString("o") }
 }
-$manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding utf8
+$manifestJson = ($manifest | ConvertTo-Json -Depth 5) + [Environment]::NewLine
+[IO.File]::WriteAllText($manifestPath, $manifestJson, $utf8NoBom)
 
 $existingTags = @(
     gh release list --limit 100 --json tagName --jq ".[].tagName"

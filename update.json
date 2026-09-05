@@ -1,6 +1,10 @@
 {
-  "version": "0.1.0",
-  "download_url": "https://github.com/LewisJ14/LabelPrinterHelper/releases/download/v0.1.0/AstroLabelPrinter-0.1.0.exe",
-  "release_page": "https://github.com/LewisJ14/LabelPrinterHelper/releases/tag/v0.1.0",
-  "notes": "Initial Astro Label Printer release"
+    "version":  "0.1.0",
+    "download_url":  "https://github.com/LewisJ14/LabelPrinterHelper/releases/download/v0.1.0/AstroLabelPrinter-0.1.0.exe",
+    "release_page":  "https://github.com/LewisJ14/LabelPrinterHelper/releases/tag/v0.1.0",
+    "notes":  "Initial release with authenticated Astro monitoring, operator filters, durable print history, label previews and automatic 101.6 x 101.2 mm stock-label printing.",
+    "sha256":  "59cbbff570c2f046b8da9c164cca1f41119e9d0eb670b4c8ce8efb6fbc913ebb",
+    "metadata":  {
+                     "generated_at":  "2026-09-05T11:40:25.6922495Z"
+                 }
 }
