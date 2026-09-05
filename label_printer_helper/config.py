@@ -20,6 +20,7 @@ class AppConfig:
     astro_url: str = "https://dev.astro-portal.co.uk"
     last_username: str = ""
     printer_name: str = ""
+    label_format: str = "main"
     selected_users: List[str] = field(default_factory=list)
     poll_seconds: int = 3
 
@@ -34,6 +35,7 @@ class AppConfig:
                 astro_url=str(data.get("astro_url") or cls.astro_url).rstrip("/"),
                 last_username=str(data.get("last_username") or ""),
                 printer_name=str(data.get("printer_name") or ""),
+                label_format=str(data.get("label_format") or "main"),
                 selected_users=list(data.get("selected_users") or []),
                 poll_seconds=max(2, min(60, int(data.get("poll_seconds") or 3))),
             )

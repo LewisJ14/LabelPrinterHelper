@@ -6,11 +6,12 @@ A Windows desktop helper that automatically prints a stock label after a device 
 
 1. Sign in with a normal Astro user account. The password is used only for the active session and is never saved.
 2. Select the Windows label printer.
-3. Select one or more Second Checking operators.
-4. Start monitoring.
-5. Astro is checked every few seconds for newly completed second-check reports. Matching operators are queued and printed once.
+3. Select the Astro-provided label format.
+4. Select one or more Second Checking operators.
+5. Start monitoring.
+6. Astro is checked every few seconds for newly completed second-check reports. Matching operators are queued and printed once.
 
-The helper uses the specification saved against the completed check, with the stock unit as a fallback for fields the check did not report. It uses the same 101.6 × 101.2 mm main-and-tear-off layout as Astro's manual stock label.
+Astro renders the finished 101.6 × 101.2 mm label artwork using the specification saved against the completed check, with the stock unit as a fallback. The helper downloads that artwork and sends it to the selected printer. Label layout and branding changes therefore take effect from Astro without requiring a new helper release.
 
 ## Safety and reliability
 
@@ -20,6 +21,8 @@ The helper uses the specification saved against the completed check, with the st
 - Failed jobs stay visible and can be retried.
 - Operator selections and the chosen printer are saved locally; passwords are not.
 - The label is always rendered at its physical size. Configure the printer driver with a 101.6 × 101.2 mm (approximately 4 × 4 inch) stock size and no scaling.
+- Available label formats come from Astro. The selected format is saved for the workstation.
+- The helper checks for updates when it starts and also provides a manual **Check for updates** action. Downloaded releases are verified against the SHA-256 value in the release manifest before installation.
 
 ## Install
 
@@ -41,9 +44,10 @@ The corresponding Web-Tools version must expose the authenticated endpoint:
 
 ```text
 GET /api/stock_units/label-queue
+GET /api/stock_units/label-artwork/<report-id>.png
 ```
 
-The endpoint is session-authenticated and read-only. The desktop helper signs in through Astro's normal login form.
+Both endpoints are session-authenticated and read-only. The desktop helper signs in through Astro's normal login form.
 
 ## Suggested next steps
 

@@ -81,7 +81,20 @@ class AstroClient:
             raise AstroApiError(payload.get("error") or "Could not read the label queue.")
         return payload
 
-    def fetch_image(self, image_url: str) -> bytes:
-        response = self.session.get(urljoin(self.base_url, image_url), timeout=self.timeout)
+    def fetch_label_artwork(
+        self,
+        artwork_url: str,
+        label_format: str = "main",
+    ) -> bytes:
+        response = self.session.get(
+            urljoin(self.base_url, artwork_url),
+            params={"format": label_format},
+            timeout=self.timeout,
+        )
+        if response.status_code == 401:
+            raise AstroApiError("Your Astro session has ended. Sign in again.")
         response.raise_for_status()
+        content_type = str(response.headers.get("Content-Type") or "").lower()
+        if "image/png" not in content_type:
+            raise AstroApiError("Astro did not return valid label artwork.")
         return response.content

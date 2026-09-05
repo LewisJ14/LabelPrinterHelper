@@ -11,9 +11,9 @@ from ttkbootstrap.constants import BOTH, DISABLED, END, LEFT, NORMAL, RIGHT, X, 
 from . import __version__
 from .api import AstroApiError, AstroClient
 from .config import AppConfig, app_data_dir
-from .label_renderer import render_label
 from .printing import available_printers, default_printer, print_label
 from .store import QueueStore
+from .update_service import UpdateManifest, UpdateService
 
 
 class LabelPrinterApp:
@@ -21,11 +21,11 @@ class LabelPrinterApp:
         self.config = AppConfig.load()
         self.store = QueueStore(app_data_dir() / "queue.db")
         self.client: Optional[AstroClient] = None
-        self.branding: Dict = {}
         self.monitoring = False
         self.selected_users = set(self.config.selected_users)
         self.stop_event = threading.Event()
         self.poll_lock = threading.Lock()
+        self.update_service = UpdateService()
 
         self.root = ttk.Window(themename="flatly")
         self.root.title(f"Astro Label Printer {__version__}")
@@ -40,6 +40,7 @@ class LabelPrinterApp:
         self._build_login()
         self._build_dashboard()
         self.dashboard.pack_forget()
+        self.root.after(1200, lambda: self._check_for_updates(silent=True))
 
     def run(self) -> None:
         self.root.mainloop()
@@ -87,12 +88,22 @@ class LabelPrinterApp:
         title_wrap.pack(side=LEFT)
         ttk.Label(title_wrap, text="ASTRO", font=("Segoe UI", 10, "bold"), bootstyle="success").pack(anchor="w")
         ttk.Label(title_wrap, text="Automatic label printing", font=("Segoe UI", 22, "bold")).pack(anchor="w")
+        version_row = ttk.Frame(title_wrap)
+        version_row.pack(anchor="w", pady=(2, 0))
         ttk.Label(
-            title_wrap,
+            version_row,
             text=f"Version {__version__}",
             font=("Segoe UI", 9),
             bootstyle="secondary",
-        ).pack(anchor="w", pady=(2, 0))
+        ).pack(side=LEFT)
+        self.update_button = ttk.Button(
+            version_row,
+            text="Check for updates",
+            command=self._check_for_updates,
+            bootstyle="link",
+            padding=(8, 0),
+        )
+        self.update_button.pack(side=LEFT)
         connection = ttk.Label(header, textvariable=self.connection_var, padding=(12, 7), bootstyle="success-inverse")
         connection.pack(side=RIGHT)
 
@@ -110,7 +121,11 @@ class LabelPrinterApp:
         self.printer_combo = ttk.Combobox(printer_card, state="readonly")
         self.printer_combo.pack(fill=X, pady=(6, 10))
         self.printer_combo.bind("<<ComboboxSelected>>", self._settings_changed)
-        ttk.Button(printer_card, text="Refresh printers", command=self._load_printers, bootstyle="secondary-outline").pack(fill=X)
+        ttk.Button(printer_card, text="Refresh printers", command=self._load_printers, bootstyle="secondary-outline").pack(fill=X, pady=(0, 12))
+        ttk.Label(printer_card, text="Label format", font=("Segoe UI", 9, "bold")).pack(anchor="w")
+        self.label_format_combo = ttk.Combobox(printer_card, state="readonly")
+        self.label_format_combo.pack(fill=X, pady=(6, 0))
+        self.label_format_combo.bind("<<ComboboxSelected>>", self._settings_changed)
 
         users_card = ttk.Labelframe(sidebar, text=" Automatically print for ", padding=16)
         users_card.pack(fill=BOTH, expand=True, pady=(0, 14))
@@ -201,7 +216,6 @@ class LabelPrinterApp:
 
     def _signed_in(self, client: AstroClient, payload: Dict, url: str, username: str) -> None:
         self.client = client
-        self.branding = payload.get("branding") or {}
         self.config.astro_url = url
         self.config.last_username = username
         self.config.save()
@@ -209,6 +223,7 @@ class LabelPrinterApp:
             self.store.set_cursor(int(payload.get("latest_report_id") or 0))
         self.password_entry.delete(0, END)
         self._populate_users(payload.get("users") or [])
+        self._populate_label_formats(payload.get("label_formats") or [])
         self._load_printers()
         self.connection_var.set(f"Connected as {payload.get('authenticated_user') or username}")
         self.status_var.set("Ready to monitor completed second checks.")
@@ -261,8 +276,34 @@ class LabelPrinterApp:
             self.printer_combo.current(0)
         self._settings_changed()
 
+    def _populate_label_formats(self, formats) -> None:
+        options = [
+            (str(item.get("name") or "").strip(), str(item.get("id") or "").strip())
+            for item in formats
+            if isinstance(item, dict) and str(item.get("id") or "").strip()
+        ]
+        if not options:
+            options = [("Main", "main")]
+        self.label_format_ids = {name: format_id for name, format_id in options}
+        self.label_format_combo["values"] = [name for name, _format_id in options]
+        preferred_name = next(
+            (
+                name
+                for name, format_id in options
+                if format_id == self.config.label_format
+            ),
+            options[0][0],
+        )
+        self.label_format_combo.set(preferred_name)
+        self._settings_changed()
+
     def _settings_changed(self, _event=None) -> None:
         self.config.printer_name = self.printer_combo.get().strip()
+        selected_format = self.label_format_combo.get().strip()
+        self.config.label_format = getattr(self, "label_format_ids", {}).get(
+            selected_format,
+            "main",
+        )
         self.config.save()
 
     def _toggle_monitoring(self) -> None:
@@ -307,7 +348,6 @@ class LabelPrinterApp:
             cursor = self.store.get_cursor()
             while True:
                 payload = self.client.fetch_queue(after_id=cursor)
-                self.branding = payload.get("branding") or self.branding
                 reports = payload.get("reports") or []
                 self.store.add_reports(reports, self.selected_users)
                 if reports:
@@ -335,12 +375,7 @@ class LabelPrinterApp:
         serial = str(job["serial_number"] or report_id)
         try:
             image_path = app_data_dir() / "labels" / f"report-{report_id}-{serial}.png"
-            render_label(
-                job["payload"],
-                image_path,
-                branding=self.branding,
-                logo_loader=self.client.fetch_image if self.client else None,
-            )
+            self._download_artwork(job, image_path)
             print_label(
                 image_path,
                 self.config.printer_name,
@@ -349,6 +384,22 @@ class LabelPrinterApp:
             self.store.set_status(report_id, "printed")
         except Exception as exc:
             self.store.set_status(report_id, "error", str(exc))
+
+    def _download_artwork(self, job: Dict, image_path: Path) -> Path:
+        if not self.client:
+            raise AstroApiError("Sign in to Astro before downloading a label.")
+        payload = job.get("payload") or {}
+        report_id = int(job["report_id"])
+        artwork_url = str(payload.get("artwork_url") or "").strip()
+        if not artwork_url:
+            artwork_url = f"api/stock_units/label-artwork/{report_id}.png"
+        content = self.client.fetch_label_artwork(
+            artwork_url,
+            self.config.label_format,
+        )
+        image_path.parent.mkdir(parents=True, exist_ok=True)
+        image_path.write_bytes(content)
+        return image_path
 
     def _poll_succeeded(self) -> None:
         self.status_var.set(
@@ -376,12 +427,7 @@ class LabelPrinterApp:
             return
         try:
             path = app_data_dir() / "previews" / f"report-{job['report_id']}.png"
-            render_label(
-                job["payload"],
-                path,
-                branding=self.branding,
-                logo_loader=self.client.fetch_image if self.client else None,
-            )
+            self._download_artwork(job, path)
             os.startfile(str(path))
         except Exception as exc:
             messagebox.showerror("Preview label", str(exc))
@@ -421,6 +467,65 @@ class LabelPrinterApp:
                 ),
             )
         self.queue_var.set(f"{waiting} waiting")
+
+    def _check_for_updates(self, silent: bool = False) -> None:
+        if hasattr(self, "update_button"):
+            self.update_button.configure(state=DISABLED)
+
+        def work():
+            try:
+                manifest = self.update_service.check_for_updates()
+                self.root.after(
+                    0,
+                    lambda: self._update_check_complete(manifest, silent),
+                )
+            except Exception as exc:
+                error = str(exc)
+                self.root.after(
+                    0,
+                    lambda error=error: self._update_check_failed(error, silent),
+                )
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _update_check_complete(
+        self,
+        manifest: Optional[UpdateManifest],
+        silent: bool,
+    ) -> None:
+        self.update_button.configure(state=NORMAL)
+        if manifest is None:
+            if not silent:
+                messagebox.showinfo(
+                    "Check for updates",
+                    "You are using the latest version.",
+                )
+            return
+        notes = str(manifest.notes or "").strip()
+        message = (
+            f"Astro Label Printer {manifest.version} is available.\n\n"
+            f"{notes}\n\n" if notes else
+            f"Astro Label Printer {manifest.version} is available.\n\n"
+        )
+        message += "Download and install it now?"
+        if not messagebox.askyesno("Update available", message):
+            return
+        try:
+            replacing_current_app = self.update_service.launch_update(manifest)
+        except Exception as exc:
+            messagebox.showerror("Update failed", str(exc))
+            return
+        if replacing_current_app:
+            self._stop_monitoring()
+            self.root.destroy()
+
+    def _update_check_failed(self, error: str, silent: bool) -> None:
+        self.update_button.configure(state=NORMAL)
+        if not silent:
+            messagebox.showerror(
+                "Update check failed",
+                f"The update service could not be reached.\n\n{error}",
+            )
 
     def _close(self) -> None:
         self._stop_monitoring()

@@ -1,4 +1,5 @@
 from label_printer_helper.store import QueueStore
+from label_printer_helper.config import AppConfig
 
 
 def report(report_id=12, checked_by="Lewis"):
@@ -39,3 +40,9 @@ def test_successful_job_is_not_pending_again(tmp_path):
 
     assert store.pending() == []
     assert store.get(12)["attempts"] == 1
+
+
+def test_label_format_is_part_of_saved_configuration():
+    config = AppConfig(label_format="second_checked")
+
+    assert config.label_format == "second_checked"
