@@ -1,0 +1,5 @@
+Pillow==10.4.0
+python-barcode==0.15.1
+pywin32==310
+requests==2.32.3
+ttkbootstrap==1.14.2
