@@ -72,9 +72,11 @@ $manifest = [ordered]@{
 }
 $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding utf8
 
-$releaseExists = $false
-gh release view $tag *> $null
-if ($LASTEXITCODE -eq 0) { $releaseExists = $true }
+$existingTags = @(
+    gh release list --limit 100 --json tagName --jq ".[].tagName"
+)
+if ($LASTEXITCODE -ne 0) { throw "Could not inspect existing GitHub releases." }
+$releaseExists = $existingTags -contains $tag
 if ($releaseExists -and $Force) {
     gh release delete $tag --yes
     if ($LASTEXITCODE -ne 0) { throw "Could not replace release $tag." }
