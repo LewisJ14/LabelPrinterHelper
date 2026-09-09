@@ -63,3 +63,18 @@ def test_fetch_label_artwork_requests_selected_format(monkeypatch):
     client.fetch_label_artwork("/label.png", "second_checked")
 
     assert requested == {"format": "second_checked"}
+
+
+def test_fetch_label_artwork_requests_the_printer_dpi(monkeypatch):
+    client = AstroClient("https://dev.astro-portal.co.uk")
+    requested = {}
+
+    def fake_get(url, params, timeout):
+        requested.update(params)
+        return FakeResponse()
+
+    monkeypatch.setattr(client.session, "get", fake_get)
+
+    client.fetch_label_artwork("/label.png", "main", dpi=300)
+
+    assert requested == {"format": "main", "dpi": 300}

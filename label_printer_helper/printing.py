@@ -20,10 +20,30 @@ def default_printer() -> str:
         return ""
 
 
+def printer_dpi(printer_name: str) -> int:
+    """Return the selected printer's native horizontal resolution."""
+    if not printer_name:
+        return 300
+    dc = win32ui.CreateDC()
+    try:
+        dc.CreatePrinterDC(printer_name)
+        value = int(dc.GetDeviceCaps(win32con.LOGPIXELSX) or 0)
+        return value if value > 0 else 300
+    finally:
+        dc.DeleteDC()
+
+
 def print_label(image_path: Path, printer_name: str, document_name: str) -> None:
     if not printer_name:
         raise RuntimeError("Choose a label printer first.")
-    image = Image.open(image_path).convert("RGB")
+    # Keep the spool data strictly black and white. Converting an RGB image in
+    # the printer driver can introduce a visible halftone pattern in white areas.
+    image = (
+        Image.open(image_path)
+        .convert("L")
+        .point(lambda pixel: 255 if pixel >= 200 else 0, mode="1")
+        .convert("RGB")
+    )
     dc = win32ui.CreateDC()
     try:
         dc.CreatePrinterDC(printer_name)

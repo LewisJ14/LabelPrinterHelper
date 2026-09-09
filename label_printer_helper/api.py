@@ -1,5 +1,5 @@
 from html.parser import HTMLParser
-from typing import Dict
+from typing import Dict, Optional
 from urllib.parse import urljoin
 
 import requests
@@ -85,10 +85,14 @@ class AstroClient:
         self,
         artwork_url: str,
         label_format: str = "main",
+        dpi: Optional[int] = None,
     ) -> bytes:
+        params = {"format": label_format}
+        if dpi is not None:
+            params["dpi"] = max(72, min(1200, int(dpi)))
         response = self.session.get(
             urljoin(self.base_url, artwork_url),
-            params={"format": label_format},
+            params=params,
             timeout=self.timeout,
         )
         if response.status_code == 401:

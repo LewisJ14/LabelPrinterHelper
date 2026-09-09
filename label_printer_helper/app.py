@@ -11,7 +11,7 @@ from ttkbootstrap.constants import BOTH, DISABLED, END, LEFT, NORMAL, RIGHT, X, 
 from . import __version__
 from .api import AstroApiError, AstroClient
 from .config import AppConfig, app_data_dir
-from .printing import available_printers, default_printer, print_label
+from .printing import available_printers, default_printer, print_label, printer_dpi
 from .store import QueueStore
 from .update_service import UpdateManifest, UpdateService
 
@@ -396,6 +396,7 @@ class LabelPrinterApp:
         content = self.client.fetch_label_artwork(
             artwork_url,
             self.config.label_format,
+            dpi=printer_dpi(self.config.printer_name),
         )
         image_path.parent.mkdir(parents=True, exist_ok=True)
         image_path.write_bytes(content)
